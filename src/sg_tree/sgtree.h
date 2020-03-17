@@ -39,7 +39,7 @@
 
 #include "utils.h"
 
-class CoverTree
+class SGTree
 {
 /************************* Internal Functions ***********************************************/
 protected:
