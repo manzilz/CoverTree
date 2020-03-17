@@ -14,23 +14,26 @@
  * limitations under the License.
  */
 
-#include "cover_tree.h"
-#include "utils.h"
+/*
+ * Copyright 2020 Google LLC.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
-#include <numeric>
+#include "sgtree.h"
 
-double* CoverTree::compute_pow_table()
+
+scalar* SGTree::compute_pow_table()
 {
-    double* powdict = new double[2048];
+    scalar* powdict = new scalar[2048];
     for (int i = 0; i<2048; ++i)
-        powdict[i] = pow(CoverTree::base, i - 1024);
+        powdict[i] = (scalar) pow(CoverTree::base, i - 1024);
     return powdict;
 }
 
-double* CoverTree::powdict = compute_pow_table();
+scalar* CoverTree::powdict = compute_pow_table();
 
 /******************************* Insert ***********************************************/
-bool CoverTree::insert(CoverTree::Node* current, const pointType& p)
+bool CoverTree::insert(CoverTree::Node* current, const pointType& p, unsigned UID)
 {
     bool result = false;
 #ifdef DEBUG
@@ -48,52 +51,48 @@ bool CoverTree::insert(CoverTree::Node* current, const pointType& p)
 
     // acquire read lock
     current->mut.lock_shared();
-
-    // Sort the children
-    unsigned num_children = current->children.size();
-    std::vector<int> idx(num_children);
-    std::iota(std::begin(idx), std::end(idx), 0);
-    std::vector<double> dists(num_children);
+	
+    // Find the closest children
+    unsigned num_children = unsigned(current->children.size());
+    scalar dist_child = std::numeric_limits<scalar>::max();
+    int child_idx = -1;
     for (unsigned i = 0; i < num_children; ++i)
-        dists[i] = current->children[i]->dist(p);
-    auto comp_x = [&dists](int a, int b) { return dists[a] < dists[b]; };
-    std::sort(std::begin(idx), std::end(idx), comp_x);
-
-    bool flag = true;
-    for (const auto& child_idx : idx)
     {
-        Node* child = current->children[child_idx];
-        double dist_child = dists[child_idx];
-        if (dist_child <= 0.0)
+        scalar temp_dist = current->children[i]->dist(p);
+        if (temp_dist < dist_child)
         {
-            // release read lock then enter child
-            current->mut.unlock_shared();
-            flag = false;
-            std::cout << "Duplicate entry!!!" << std::endl;
-            break;
-        }
-        else if (dist_child <= child->covdist())
-        {
-            // release read lock then enter child
-            if (child->maxdistUB < dist_child)
-                child->maxdistUB = dist_child;
-            current->mut.unlock_shared();
-            result = insert(child, p);
-            flag = false;
-            break;
+            dist_child = temp_dist;
+            child_idx = i;
         }
     }
 
-    if (flag)
+    if (dist_child <= 0.0)
     {
-        // release read lock then acquire write lock
+        //release read lock then enter child
+        current->mut.unlock_shared();
+        std::cout << "Duplicate entry!!!" << std::endl;
+        // std::cout << current->children[child_idx]->_p << std::endl;
+        // std::cout << p << std::endl;
+    }
+    else if (dist_child <= current->sepdist())
+    {
+        //release read lock then enter child
+        Node* child = current->children[child_idx];
+        if (child->maxdistUB < dist_child)
+           child->maxdistUB = dist_child;
+        current->mut.unlock_shared();
+        result = insert(child, p, UID);
+    }
+    else
+    {
+        //release read lock then acquire write lock
         current->mut.unlock_shared();
         current->mut.lock();
         // check if insert is still valid, i.e. no other point was inserted else restart
         if (num_children==current->children.size())
         {
-            int new_id = ++N;
-            current->setChild(p, new_id);
+            int new_id = N++;
+            current->setChild(p, UID, new_id);
             result = true;
             current->mut.unlock();
 
@@ -106,108 +105,23 @@ bool CoverTree::insert(CoverTree::Node* current, const pointType& p)
         else
         {
             current->mut.unlock();
-            result = insert(current, p);
+            result = insert(current, p, UID);
         }
-        //if (min_scale > current->level - 1)
-        //{
-            //min_scale = current->level - 1;
-            ////std::cout << minScale << " " << maxScale << std::endl;
-        //}
     }
     return result;
 }
 
-bool CoverTree::insert(CoverTree::Node* current, CoverTree::Node* p)
-{
-    bool result = false;
-    std::cout << "Node insert called!";
-#ifdef DEBUG
-    if (current->dist(p) > current->covdist())
-        throw std::runtime_error("Internal insert got wrong input!");
-    if (truncateLevel > 0 && current->level < maxScale - truncateLevel)
-    {
-        std::cout << maxScale;
-        std::cout << " skipped" << std::endl;
-        return false;
-    }
-#endif
-    if (truncate_level > 0 && current->level < max_scale-truncate_level)
-        return false;
-
-    // acquire read lock
-    current->mut.lock_shared();
-
-    // Sort the children
-    unsigned num_children = current->children.size();
-    std::vector<int> idx(num_children);
-    std::iota(std::begin(idx), std::end(idx), 0);
-    std::vector<double> dists(num_children);
-    for (unsigned i = 0; i < num_children; ++i)
-        dists[i] = current->children[i]->dist(p);
-    auto comp_x = [&dists](int a, int b) { return dists[a] < dists[b]; };
-    std::sort(std::begin(idx), std::end(idx), comp_x);
-
-    bool flag = true;
-    for (const auto& child_idx : idx)
-    {
-        Node* child = current->children[child_idx];
-        double dist_child = dists[child_idx];
-        if (dist_child <= 0.0)
-        {
-            // release read lock then enter child
-            current->mut.unlock_shared();
-            flag = false;
-            break;
-        }
-        else if (dist_child <= child->covdist())
-        {
-            // release read lock then enter child
-            current->mut.unlock_shared();
-            result = insert(child, p);
-            flag = false;
-            break;
-        }
-    }
-
-    if (flag)
-    {
-        // release read lock then acquire write lock
-        current->mut.unlock_shared();
-        current->mut.lock();
-        // check if insert is still valid, i.e. no other point was inserted else restart
-        if (num_children==current->children.size())
-        {
-            ++N;
-            current->setChild(p);
-            result = true;
-            current->mut.unlock();
-
-            int local_min = min_scale.load();
-            while( local_min > current->level - 1){
-                min_scale.compare_exchange_weak(local_min, current->level - 1, std::memory_order_relaxed, std::memory_order_relaxed);
-                local_min = min_scale.load();
-            }
-        }
-        else
-        {
-            current->mut.unlock();
-            result = insert(current, p);
-        }
-        //if (min_scale > current->level - 1)
-        //{
-            //min_scale = current->level - 1;
-            ////std::cout << minScale << " " << maxScale << std::endl;
-        //}
-    }
-    return result;
-}
-
-bool CoverTree::insert(const pointType& p)
+bool SGTree::insert(const pointType& p, unsigned UID)
 {
     bool result = false;
     id_valid = false;
     global_mut.lock_shared();
-    if (root->dist(p) > root->covdist())
+    scalar curr_root_dist = root->dist(p);
+    if (curr_root_dist <= 0.0)
+    {
+        std::cout << "Duplicate entry!!!" << std::endl;
+    }
+    else if (curr_root_dist > root->covdist())
     {
         global_mut.unlock_shared();
         std::cout<<"Entered case 1: " << root->dist(p) << " " << root->covdist() << " " << root->level <<std::endl;
@@ -253,8 +167,7 @@ bool CoverTree::insert(const pointType& p)
     }
     else
     {
-        //root->tempDist = root->dist(p);
-        result = insert(root, p);
+        result = insert(root, p, UID);
     }
     global_mut.unlock_shared();
     return result;
