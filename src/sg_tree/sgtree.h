@@ -20,8 +20,8 @@
  */
 
 
-# ifndef _COVER_TREE_H
-# define _COVER_TREE_H
+# ifndef _SG_TREE_H
+# define _SG_TREE_H
 
 //#define DEBUG
 
@@ -147,7 +147,7 @@ protected:
     int truncate_level;                 // Relative level below which the tree is truncated
     bool id_valid;
 
-    std::atomic<unsigned> N;            // Number of points in the cover tree
+    std::atomic<unsigned> N;            // Number of points in the SG tree
     unsigned D;                         // Dimension of the points
 
     std::shared_mutex global_mut;       // lock for changing the root
@@ -162,48 +162,48 @@ protected:
 
 public:
     /*** Internal Contructors ***/
-    /*** Constructor: needs at least 1 point to make a valid cover-tree ***/
+    /*** Constructor: needs at least 1 point to make a valid SG tree ***/
     // NULL tree
-    explicit CoverTree(int truncate = -1);
-    // cover tree with one point as root
-    CoverTree(const pointType& p, int truncate = -1);
-    // cover tree using points in the list between begin and end
-    CoverTree(std::vector<pointType>& pList, int begin, int end, int truncate = -1, bool use_multi_core = true);
-    // cover tree using points in the list between begin and end
-    CoverTree(matrixType& pMatrix, int begin, int end, int truncate = -1, bool use_multi_core = true);
-    // cover tree using points in the list between begin and end
-    CoverTree(Eigen::Map<matrixType>& pMatrix, int begin, int end, int truncate = -1, bool use_multi_core = true);
+    explicit SGTree(int truncate = -1);
+    // SG tree with one point as root
+    SGTree(const pointType& p, int truncate = -1);
+    // SG tree using points in the list between begin and end
+    SGTree(std::vector<pointType>& pList, int begin, int end, int truncate = -1, bool use_multi_core = true);
+    // SG tree using points in the list between begin and end
+    SGTree(matrixType& pMatrix, int begin, int end, int truncate = -1, bool use_multi_core = true);
+    // SG tree using points in the list between begin and end
+    SGTree(Eigen::Map<matrixType>& pMatrix, int begin, int end, int truncate = -1, bool use_multi_core = true);
 
     /*** Destructor ***/
     /*** Destructor: deallocating all memories by a post order traversal ***/
-    ~CoverTree();
+    ~SGTree();
 
 /************************* Public API ***********************************************/
 public:
-    /*** construct cover tree using all points in the list ***/
-    static CoverTree* from_points(std::vector<pointType>& pList, int truncate = -1, bool use_multi_core = true);
+    /*** construct SG tree using all points in the list ***/
+    static SGTree* from_points(std::vector<pointType>& pList, int truncate = -1, bool use_multi_core = true);
 
-    /*** construct cover tree using all points in the matrix in row-major form ***/
-    static CoverTree* from_matrix(matrixType& pMatrix, int truncate = -1, bool use_multi_core = true);
+    /*** construct SG tree using all points in the matrix in row-major form ***/
+    static SGTree* from_matrix(matrixType& pMatrix, int truncate = -1, bool use_multi_core = true);
 
-    /*** construct cover tree using all points in the matrix in row-major form ***/
-    static CoverTree* from_matrix(Eigen::Map<matrixType>& pMatrix, int truncate = -1, bool use_multi_core = true);
+    /*** construct SG tree using all points in the matrix in row-major form ***/
+    static SGTree* from_matrix(Eigen::Map<matrixType>& pMatrix, int truncate = -1, bool use_multi_core = true);
 
 
-    /*** Insert point p into the cover tree ***/
+    /*** Insert point p into the SG tree ***/
     bool insert(const pointType& p, unsigned UID = 0);
 
-    /*** Remove point p from the cover tree ***/
+    /*** Remove point p from the SG tree ***/
     bool remove(const pointType& p);
 
     /*** Nearest Neighbour search ***/
-    std::pair<CoverTree::Node*, double> NearestNeighbour(const pointType &p) const;
+    std::pair<SGTree::Node*, double> NearestNeighbour(const pointType &p) const;
 
     /*** k-Nearest Neighbour search ***/
-    std::vector<std::pair<CoverTree::Node*, double>> kNearestNeighbours(const pointType &p, unsigned k = 10) const;
+    std::vector<std::pair<SGTree::Node*, double>> kNearestNeighbours(const pointType &p, unsigned k = 10) const;
 
     /*** Range search ***/
-    std::vector<std::pair<CoverTree::Node*, double>> rangeNeighbours(const pointType &p, double range = 1.0) const;
+    std::vector<std::pair<SGTree::Node*, double>> rangeNeighbours(const pointType &p, double range = 1.0) const;
 
     /*** Serialize/Desrialize: useful for MPI ***/
     char* serialize() const;                                    // Serialize to a buffer
@@ -217,8 +217,8 @@ public:
     void print_degrees() const;
 
     /*** Pretty print ***/
-    friend std::ostream& operator<<(std::ostream& os, const CoverTree& ct);
+    friend std::ostream& operator<<(std::ostream& os, const SGTree& ct);
 };
 
-#endif //_COVER_TREE_H
+#endif //_SG_TREE_H
 
